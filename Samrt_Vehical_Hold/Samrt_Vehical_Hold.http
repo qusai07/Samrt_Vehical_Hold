@@ -1,0 +1,6 @@
+@Samrt_Vehical_Hold_HostAddress = http://localhost:5193
+
+GET {{Samrt_Vehical_Hold_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
