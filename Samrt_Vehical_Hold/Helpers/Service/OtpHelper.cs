@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 
-namespace Samrt_Vehical_Hold.Helpers
+namespace Samrt_Vehical_Hold.Helpers.Service
 {
     public static class OtpHelper
     {

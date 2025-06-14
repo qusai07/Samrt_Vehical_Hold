@@ -1,9 +1,18 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Samrt_Vehical_Hold.Data;
-using Samrt_Vehical_Hold.DTO;
-using Samrt_Vehical_Hold.Helpers;
+using Samrt_Vehical_Hold.DTO.Login;
+using Samrt_Vehical_Hold.DTO.ResetPassword;
+using Samrt_Vehical_Hold.DTO.SignUp;
+using Samrt_Vehical_Hold.DTO.UserInfo;
+using Samrt_Vehical_Hold.Helpers.Service;
 using Samrt_Vehical_Hold.Models;
+using System.Net;
+using System.Security.Claims;
+using ForgotPasswordRequest = Samrt_Vehical_Hold.DTO.ResetPassword.ForgotPasswordRequest;
+using ResetPasswordRequest = Samrt_Vehical_Hold.DTO.ResetPassword.ResetPasswordRequest;
 
 
 namespace Samrt_Vehical_Hold.Controllers
@@ -15,13 +24,17 @@ namespace Samrt_Vehical_Hold.Controllers
         private readonly ApplicationDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly JwtHelper _jwtHelper;
+        private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
 
 
-        public AuthController(ApplicationDbContext context, IConfiguration configuration)
+
+        public AuthController(ApplicationDbContext context, IConfiguration configuration, IPasswordHasher<ApplicationUser> passwordHasher, JwtHelper jwtHelper)
         {
             _context = context;
-            _configuration = configuration;
-            _jwtHelper = new JwtHelper(configuration);
+            _jwtHelper = jwtHelper;
+            _passwordHasher = passwordHasher;
+            _configuration = configuration!;
+
         }
 
 
@@ -38,8 +51,11 @@ namespace Samrt_Vehical_Hold.Controllers
 
             if (_context.Users.Any(x => x.EmailAddress == signupParameters.EmailAddress))
                 errors.Add("EmailAddressUsed");
-            
-            if(errors.Any())
+            if (_context.Users.Any(x => x.NationalNumber == signupParameters.NationalNumber && x.IsActive))
+                errors.Add("NationalNumberUsed");
+
+
+            if (errors.Any())
                 return BadRequest(errors);
             var user = new ApplicationUser
             {
@@ -47,12 +63,13 @@ namespace Samrt_Vehical_Hold.Controllers
                 UserName = signupParameters.UserName,
                 EmailAddress = signupParameters.EmailAddress,
                 MobileNumber = signupParameters.MobileNumber,
+                NationalNumber = signupParameters.NationalNumber,
                 IsActive = false,
                 OtpCode = OtpHelper.GenerateOtp(6),
                 OtpDate = DateTime.UtcNow,
             };
 
-            user.PasswordHash = PasswordHelper.HashPassword(signupParameters.Password);
+            user.PasswordHash = _passwordHasher.HashPassword(user, signupParameters.Password);
             _context.Users.Add(user);
             _context.SaveChanges();
             Console.WriteLine($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
@@ -97,5 +114,188 @@ namespace Samrt_Vehical_Hold.Controllers
 
             return Ok("AccountVerified");
         }
+
+        [HttpGet("CheckNationalNumber/{userId}")]
+        public IActionResult CheckNationalNumber(Guid userId)
+        {
+            var user = _context.Users.FirstOrDefault(x => x.Id == userId);
+
+            if (user == null)
+                return NotFound("UserNotFound");
+
+            if (string.IsNullOrEmpty(user.NationalNumber))
+                return Ok(new
+                {
+                    HasNationalNumber = false,
+                    Message = "User has no National Number registered."
+                });
+
+            return Ok(new
+            {
+                HasNationalNumber = true,
+                NationalNumber = user.NationalNumber,
+                FullName = user.FullName,
+                MobileNumber = user.MobileNumber,
+                EmailAddress = user.EmailAddress
+            });
+        }
+
+        [HttpPost("Login")]
+        public IActionResult Login([FromBody] LoginParameters loginParameters)
+        {
+            var user = _context.Users.FirstOrDefault(x => (x.UserName == loginParameters.UserNameOrEmail || x.EmailAddress == loginParameters.UserNameOrEmail));
+
+            if (user == null)
+                return BadRequest("UserNotFound");
+
+            if (!user.IsActive)
+                return BadRequest("AccountNotActive");
+
+            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, loginParameters.Password);
+            if (result == PasswordVerificationResult.Failed)
+                return BadRequest("InvalidPassword");
+
+
+            var token = _jwtHelper.GenerateToken(user);
+            return Ok(
+                new 
+                {
+                    Token = token,
+                    FullName = user.FullName
+
+                });
+        }
+
+        // Email Sender Class (SMTP + MailKit) we Need that
+        [HttpPost("ForgotPassword")]
+        public IActionResult ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            var user = _context.Users.FirstOrDefault(u => u.EmailAddress == request.Email);
+            if (user == null)
+                return BadRequest("UserNotFound");
+
+            var resetCode = new Random().Next(100000, 999999).ToString();
+
+            var resetRequest = new PasswordResetRequest
+            {
+                UserId = user.Id,
+                ResetCode = resetCode,
+                ExpiryDate = DateTime.UtcNow.AddMinutes(15)
+            };
+
+            _context.PasswordResetRequests.Add(resetRequest);
+            _context.SaveChanges();
+
+            return Ok("Otp Sent");
+        }
+
+        [HttpPost("ResetPassword")]
+        public IActionResult ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            var user = _context.Users.FirstOrDefault(u => u.EmailAddress == request.Email);
+            if (user == null)
+                return BadRequest("UserNotFound");
+
+            var resetRequest = _context.PasswordResetRequests
+                .FirstOrDefault(r => r.UserId == user.Id && r.ResetCode == request.ResetCode && !r.IsUsed);
+
+            if (resetRequest == null)
+                return BadRequest("InvalidResetCode");
+
+            if (resetRequest.ExpiryDate < DateTime.UtcNow)
+                return BadRequest("ResetCodeExpired");
+
+            user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+
+            resetRequest.IsUsed = true;
+
+            _context.SaveChanges();
+
+            return Ok("PasswordResetSuccessful");
+        }
+        [Authorize]
+        [HttpPost("ChangePassword")]
+        public IActionResult ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (userId == null)
+                return Unauthorized();
+
+            var user = _context.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+
+            if (user == null)
+                return NotFound("UserNotFound");
+
+            var isOldPasswordValid = PasswordHelper.VerifyPassword(request.OldPassword, user.PasswordHash);
+            if (!isOldPasswordValid)
+                return BadRequest("InvalidOldPassword");
+
+            user.PasswordHash = PasswordHelper.HashPassword(request.NewPassword);
+            _context.SaveChanges();
+
+            return Ok("PasswordChangedSuccessfully");
+        }
+
+        [Authorize]
+        [HttpGet("GetProfile")]
+        public IActionResult GetProfile()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (userId == null)
+                return Unauthorized();
+
+            var user = _context.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+
+            if (user == null)
+                return NotFound("UserNotFound");
+
+            return Ok(new
+            {
+                user.Id,
+                user.FullName,
+                user.UserName,
+                user.EmailAddress,
+                user.IsActive
+            });
+        }
+        [Authorize]
+        [HttpPost("UpdateProfile")]
+        public IActionResult UpdateProfile([FromBody] UpdateProfileRequest request)
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+            if (userId == null)
+                return Unauthorized();
+
+            var user = _context.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+
+            if (user == null)
+                return NotFound("UserNotFound");
+
+            // Check if email is already used by another user
+            var isEmailTaken = _context.Users.Any(u => u.EmailAddress == request.EmailAddress && u.Id.ToString() != userId);
+            if (isEmailTaken)
+                return BadRequest("EmailAlreadyInUse");
+
+            // Update data
+            user.EmailAddress = request.EmailAddress;
+            user.MobileNumber = request.MobileNumber;
+
+            _context.SaveChanges();
+
+            return Ok("ProfileUpdatedSuccessfully");
+        }
+        [Authorize]
+        [HttpPost("Logout")]
+        public IActionResult Logout()
+        {
+            return Ok("LoggedOutSuccessfully");
+        }
+
+
+
+
     }
 }

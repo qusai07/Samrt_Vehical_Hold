@@ -1,4 +1,4 @@
-﻿namespace Samrt_Vehical_Hold.DTO
+﻿namespace Samrt_Vehical_Hold.DTO.SignUp
 {
     public class SignupUserParameters
     {
