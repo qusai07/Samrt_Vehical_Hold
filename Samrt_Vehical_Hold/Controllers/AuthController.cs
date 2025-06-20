@@ -9,51 +9,44 @@ using Samrt_Vehical_Hold.DTO.SignUp;
 using Samrt_Vehical_Hold.DTO.UserInfo;
 using Samrt_Vehical_Hold.Helpers.Service;
 using Samrt_Vehical_Hold.Models;
+using Samrt_Vehical_Hold.Repo.Interface;
 using System.Net;
 using System.Security.Claims;
-using ForgotPasswordRequest = Samrt_Vehical_Hold.DTO.ResetPassword.ForgotPasswordRequest;
-using ResetPasswordRequest = Samrt_Vehical_Hold.DTO.ResetPassword.ResetPasswordRequest;
 
 
 namespace Samrt_Vehical_Hold.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController : ControllerBase
+    public class AuthController : BaseController
     {
         private readonly ApplicationDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly JwtHelper _jwtHelper;
         private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
 
-
-
-        public AuthController(ApplicationDbContext context, IConfiguration configuration, IPasswordHasher<ApplicationUser> passwordHasher, JwtHelper jwtHelper)
+        private readonly IDataService _dataService;
+        public AuthController(IDataService dataService,IConfiguration configuration,IPasswordHasher<ApplicationUser> passwordHasher,JwtHelper jwtHelper) : base(dataService)
         {
-            _context = context;
-            _jwtHelper = jwtHelper;
+            _configuration = configuration;
             _passwordHasher = passwordHasher;
-            _configuration = configuration!;
-
+            _jwtHelper = jwtHelper;
         }
 
 
         [HttpPost("SignUp")]
-        public IActionResult SignUp([FromBody] SignupParameters signupParameters) 
+        public async Task <IActionResult>SignUp([FromBody] SignupParameters signupParameters) 
         {
             var errors = new List<string>();
-
-            if (_context.Users.Any(x => x.UserName == signupParameters.UserName))
+            if (_dataService.GetQuery<ApplicationUser>().Any(x => x.UserName == signupParameters.UserName))
                 errors.Add("UserNameUsed");
-
-            if(_context.Users.Any(x => x.MobileNumber == signupParameters.MobileNumber))
+            if (_dataService.GetQuery<ApplicationUser>().Any(x => x.MobileNumber == signupParameters.MobileNumber))
                 errors.Add("MobileNumberUsed");
-
-            if (_context.Users.Any(x => x.EmailAddress == signupParameters.EmailAddress))
+            if (_dataService.GetQuery<ApplicationUser>().Any(x => x.EmailAddress == signupParameters.EmailAddress))
                 errors.Add("EmailAddressUsed");
-            if (_context.Users.Any(x => x.NationalNumber == signupParameters.NationalNumber && x.IsActive))
+            if (_dataService.GetQuery<ApplicationUser>().Any(x => x.NationalNumber == signupParameters.NationalNumber))
                 errors.Add("NationalNumberUsed");
-
+        
 
             if (errors.Any())
                 return BadRequest(errors);
@@ -70,16 +63,16 @@ namespace Samrt_Vehical_Hold.Controllers
             };
 
             user.PasswordHash = _passwordHasher.HashPassword(user, signupParameters.Password);
-            _context.Users.Add(user);
-            _context.SaveChanges();
+            await _dataService.AddAsync(user);
+            await _dataService.SaveAsync();
             Console.WriteLine($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
             return Ok(new { user.Id });
         }
 
         [HttpPost("SignupResendOtp")]
-        public IActionResult SignupResendOtp([FromBody] SignupUserParameters signupUserParameters)
+        public async Task <IActionResult>SignupResendOtp([FromBody] SignupUserParameters signupUserParameters)
         {
-            var user = _context.Users.FirstOrDefault(x => x.Id == signupUserParameters.Id);
+            var user = await GetUserByIdAsync(signupUserParameters.Id);
 
             if (user == null)
                 return BadRequest("UserNotFound");
@@ -90,16 +83,15 @@ namespace Samrt_Vehical_Hold.Controllers
 
             user.OtpCode = OtpHelper.GenerateOtp(6);
             user.OtpDate = DateTime.UtcNow;
-            _context.SaveChanges();
-            Console.WriteLine($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
-
-            return Ok();
+            _dataService.SaveAsync();
+            return Ok($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
         }
 
         [HttpPost("SignupVerifyOtp")]
-        public IActionResult SignupVerifyOtp([FromBody] SignupVerifyOtpParameters signupVerifyOtpParameters)
+        public async Task <IActionResult> SignupVerifyOtp([FromBody] SignupVerifyOtpParameters signupVerifyOtpParameters)
         {
-            var user = _context.Users.FirstOrDefault(x => x.Id == signupVerifyOtpParameters.Id);
+            var user = await GetUserByIdAsync(signupVerifyOtpParameters.Id);
+
             if (user == null) return BadRequest("UserNotFound");
 
             var otpTimeOut = _configuration.GetValue("OtpTimeOut", 2); // 2 mins
@@ -110,16 +102,14 @@ namespace Samrt_Vehical_Hold.Controllers
                 return BadRequest("OtpNotMatched");
 
             user.IsActive = true;
-            _context.SaveChanges();
-
+            _dataService.SaveAsync();
             return Ok("AccountVerified");
         }
 
         [HttpGet("CheckNationalNumber/{userId}")]
-        public IActionResult CheckNationalNumber(Guid userId)
+        public async Task<IActionResult> CheckNationalNumber(Guid userId)
         {
-            var user = _context.Users.FirstOrDefault(x => x.Id == userId);
-
+            var user = await GetUserByIdAsync(userId);
             if (user == null)
                 return NotFound("UserNotFound");
 
@@ -141,9 +131,11 @@ namespace Samrt_Vehical_Hold.Controllers
         }
 
         [HttpPost("Login")]
-        public IActionResult Login([FromBody] LoginParameters loginParameters)
+        public async Task<IActionResult> Login([FromBody] LoginParameters loginParameters)
         {
-            var user = _context.Users.FirstOrDefault(x => (x.UserName == loginParameters.UserNameOrEmail || x.EmailAddress == loginParameters.UserNameOrEmail));
+            var user =  _dataService.GetQuery<ApplicationUser>()
+             .FirstOrDefault(x => x.UserName == loginParameters.UserNameOrEmail);
+
 
             if (user == null)
                 return BadRequest("UserNotFound");
@@ -168,9 +160,10 @@ namespace Samrt_Vehical_Hold.Controllers
 
         // Email Sender Class (SMTP + MailKit) we Need that
         [HttpPost("ForgotPassword")]
-        public IActionResult ForgotPassword([FromBody] ForgotPasswordRequest request)
+        public async Task<IActionResult> ForgotPassword([FromBody] DTO.ResetPassword.ForgotPasswordRequest request)
         {
-            var user = _context.Users.FirstOrDefault(u => u.EmailAddress == request.Email);
+            var user = _dataService.GetQuery<ApplicationUser>()
+                .FirstOrDefault(u => u.EmailAddress == request.Email);
             if (user == null)
                 return BadRequest("UserNotFound");
 
@@ -182,15 +175,13 @@ namespace Samrt_Vehical_Hold.Controllers
                 ResetCode = resetCode,
                 ExpiryDate = DateTime.UtcNow.AddMinutes(15)
             };
-
-            _context.PasswordResetRequests.Add(resetRequest);
-            _context.SaveChanges();
+            await _dataService.CreateAsync(resetRequest);
 
             return Ok("Otp Sent");
         }
 
         [HttpPost("ResetPassword")]
-        public IActionResult ResetPassword([FromBody] ResetPasswordRequest request)
+        public IActionResult ResetPassword([FromBody] DTO.ResetPassword.ResetPasswordRequest request)
         {
             var user = _context.Users.FirstOrDefault(u => u.EmailAddress == request.Email);
             if (user == null)
@@ -239,14 +230,14 @@ namespace Samrt_Vehical_Hold.Controllers
 
         [Authorize]
         [HttpGet("GetProfile")]
-        public IActionResult GetProfile()
+        public async Task <IActionResult> GetProfile()
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             if (userId == null)
                 return Unauthorized();
 
-            var user = _context.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+            var user = await _dataService.GetByIdAsync<ApplicationUser>(Guid.Parse(userId));
 
             if (user == null)
                 return NotFound("UserNotFound");
@@ -262,14 +253,14 @@ namespace Samrt_Vehical_Hold.Controllers
         }
         [Authorize]
         [HttpPost("UpdateProfile")]
-        public IActionResult UpdateProfile([FromBody] UpdateProfileRequest request)
+        public async Task <IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
         {
             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             if (userId == null)
                 return Unauthorized();
 
-            var user = _context.Users.FirstOrDefault(u => u.Id.ToString() == userId);
+            var user = await _dataService.GetByIdAsync<ApplicationUser>(Guid.Parse(userId));
 
             if (user == null)
                 return NotFound("UserNotFound");
@@ -283,7 +274,7 @@ namespace Samrt_Vehical_Hold.Controllers
             user.EmailAddress = request.EmailAddress;
             user.MobileNumber = request.MobileNumber;
 
-            _context.SaveChanges();
+            _dataService.SaveAsync();
 
             return Ok("ProfileUpdatedSuccessfully");
         }

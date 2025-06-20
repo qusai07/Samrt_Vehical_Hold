@@ -13,5 +13,11 @@ namespace Samrt_Vehical_Hold.Repo.Interface
         Task<T> UpdateAsync<T>(T entity) where T : class;
         Task<bool> DeleteAsync<T>(object key) where T : class;
         IQueryable<T> Query<T>() where T : class;
+        IQueryable<T> GetQuery<T>() where T : class;
+        Task AddAsync<T>(T entity) where T : class;
+
+        Task SaveAsync();
+
+
     }
 }

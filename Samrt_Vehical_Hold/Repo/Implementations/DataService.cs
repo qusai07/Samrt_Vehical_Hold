@@ -18,7 +18,14 @@ namespace Samrt_Vehical_Hold.Repo.Impement
         {
             _context = context;
         }
-
+        public async Task SaveAsync()
+        {
+            await _context.SaveChangesAsync();
+        }
+        public async Task AddAsync<T>(T entity) where T : class
+        {
+            await _context.Set<T>().AddAsync(entity);
+        }
         public async Task<IEnumerable<T>> GetAllAsync<T>() where T : class
         {
             return await _context.Set<T>().ToListAsync();
@@ -55,6 +62,12 @@ namespace Samrt_Vehical_Hold.Repo.Impement
         }
 
         public IQueryable<T> Query<T>() where T : class
+        {
+            return _context.Set<T>().AsQueryable();
+        }
+
+
+        public IQueryable<T> GetQuery<T>() where T : class
         {
             return _context.Set<T>().AsQueryable();
         }

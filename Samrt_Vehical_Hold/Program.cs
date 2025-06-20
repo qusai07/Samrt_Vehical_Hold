@@ -7,6 +7,8 @@ using Samrt_Vehical_Hold.Helpers.Model;
 using Samrt_Vehical_Hold.Models;
 using System.Text;
 using Samrt_Vehical_Hold.Helpers.Service;
+using Samrt_Vehical_Hold.Repo.Impement;
+using Samrt_Vehical_Hold.Repo.Interface;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -78,7 +80,11 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PasswordHasher<ApplicationUser>>();
-builder.Services.AddScoped<JwtHelper>(); 
+builder.Services.AddScoped<JwtHelper>();
+
+builder.Services.AddScoped<IDataService, DataService>();
+
+
 
 var app = builder.Build();
 
