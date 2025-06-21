@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Samrt_Vehical_Hold.Models;
 using Samrt_Vehical_Hold.Repo.Interface;
+using System.Security.Claims;
 
 namespace Samrt_Vehical_Hold.Controllers
 {
@@ -20,6 +21,15 @@ namespace Samrt_Vehical_Hold.Controllers
         {
             return await _dataService.GetByIdAsync<ApplicationUser>(userId);
         }
+        //helper method
+        protected Guid? GetUserId()
+        {
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (Guid.TryParse(userId, out var guid))
+                return guid;
+            return null;
+        }
+
     }
 
 }

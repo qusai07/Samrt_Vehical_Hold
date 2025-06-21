@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Samrt_Vehical_Hold.Data;
 using Samrt_Vehical_Hold.DTO.Login;
 using Samrt_Vehical_Hold.DTO.ResetPassword;
@@ -25,15 +26,13 @@ namespace Samrt_Vehical_Hold.Controllers
         private readonly JwtHelper _jwtHelper;
         private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
 
-        private readonly IDataService _dataService;
         public AuthController(IDataService dataService,IConfiguration configuration,IPasswordHasher<ApplicationUser> passwordHasher,JwtHelper jwtHelper) : base(dataService)
         {
             _configuration = configuration;
             _passwordHasher = passwordHasher;
             _jwtHelper = jwtHelper;
         }
-
-
+        //Done
         [HttpPost("SignUp")]
         public async Task <IActionResult>SignUp([FromBody] SignupParameters signupParameters) 
         {
@@ -68,7 +67,7 @@ namespace Samrt_Vehical_Hold.Controllers
             Console.WriteLine($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
             return Ok(new { user.Id });
         }
-
+        //Done
         [HttpPost("SignupResendOtp")]
         public async Task <IActionResult>SignupResendOtp([FromBody] SignupUserParameters signupUserParameters)
         {
@@ -86,7 +85,7 @@ namespace Samrt_Vehical_Hold.Controllers
             _dataService.SaveAsync();
             return Ok($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
         }
-
+        //Done
         [HttpPost("SignupVerifyOtp")]
         public async Task <IActionResult> SignupVerifyOtp([FromBody] SignupVerifyOtpParameters signupVerifyOtpParameters)
         {
@@ -105,7 +104,7 @@ namespace Samrt_Vehical_Hold.Controllers
             _dataService.SaveAsync();
             return Ok("AccountVerified");
         }
-
+        //Done
         [HttpGet("CheckNationalNumber/{userId}")]
         public async Task<IActionResult> CheckNationalNumber(Guid userId)
         {
@@ -129,12 +128,12 @@ namespace Samrt_Vehical_Hold.Controllers
                 EmailAddress = user.EmailAddress
             });
         }
-
+        //Done
         [HttpPost("Login")]
         public async Task<IActionResult> Login([FromBody] LoginParameters loginParameters)
         {
             var user =  _dataService.GetQuery<ApplicationUser>()
-             .FirstOrDefault(x => x.UserName == loginParameters.UserNameOrEmail);
+             .FirstOrDefault(x => x.UserName == loginParameters.UserNameOrEmail || x.EmailAddress == loginParameters.UserNameOrEmail);
 
 
             if (user == null)
@@ -149,13 +148,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
 
             var token = _jwtHelper.GenerateToken(user);
-            return Ok(
-                new 
-                {
-                    Token = token,
-                    FullName = user.FullName
-
-                });
+            return Ok(token);
         }
 
         // Email Sender Class (SMTP + MailKit) we Need that
@@ -179,16 +172,18 @@ namespace Samrt_Vehical_Hold.Controllers
 
             return Ok("Otp Sent");
         }
-
+        //Done
         [HttpPost("ResetPassword")]
-        public IActionResult ResetPassword([FromBody] DTO.ResetPassword.ResetPasswordRequest request)
+        public async Task<IActionResult> ResetPassword([FromBody] DTO.ResetPassword.ResetPasswordRequest request)
         {
-            var user = _context.Users.FirstOrDefault(u => u.EmailAddress == request.Email);
+            var user = await _dataService.GetQuery<ApplicationUser>()
+        .FirstOrDefaultAsync(u => u.EmailAddress == request.Email);
+
             if (user == null)
                 return BadRequest("UserNotFound");
 
-            var resetRequest = _context.PasswordResetRequests
-                .FirstOrDefault(r => r.UserId == user.Id && r.ResetCode == request.ResetCode && !r.IsUsed);
+            var resetRequest = await _dataService.GetQuery<PasswordResetRequest>()
+        .FirstOrDefaultAsync(r => r.UserId == user.Id && r.ResetCode == request.ResetCode && !r.IsUsed);
 
             if (resetRequest == null)
                 return BadRequest("InvalidResetCode");
@@ -200,44 +195,42 @@ namespace Samrt_Vehical_Hold.Controllers
 
             resetRequest.IsUsed = true;
 
-            _context.SaveChanges();
+            await _dataService.SaveAsync();
 
             return Ok("PasswordResetSuccessful");
         }
+       //Done
         [Authorize]
         [HttpPost("ChangePassword")]
-        public IActionResult ChangePassword([FromBody] ChangePasswordRequest request)
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
+            var userId = GetUserId();
             if (userId == null)
                 return Unauthorized();
 
-            var user = _context.Users.FirstOrDefault(u => u.Id.ToString() == userId);
-
+            var user = await _dataService.GetByIdAsync<ApplicationUser>(userId.Value);
             if (user == null)
                 return NotFound("UserNotFound");
 
-            var isOldPasswordValid = PasswordHelper.VerifyPassword(request.OldPassword, user.PasswordHash);
-            if (!isOldPasswordValid)
+            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.OldPassword);
+            if (result == PasswordVerificationResult.Failed)
                 return BadRequest("InvalidOldPassword");
 
-            user.PasswordHash = PasswordHelper.HashPassword(request.NewPassword);
-            _context.SaveChanges();
-
+            user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
+            await _dataService.UpdateAsync(user);
+            await _dataService.SaveAsync();
             return Ok("PasswordChangedSuccessfully");
         }
-
+        //Done
         [Authorize]
         [HttpGet("GetProfile")]
         public async Task <IActionResult> GetProfile()
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
+            var userId = GetUserId();
             if (userId == null)
                 return Unauthorized();
 
-            var user = await _dataService.GetByIdAsync<ApplicationUser>(Guid.Parse(userId));
+            var user = await _dataService.GetByIdAsync<ApplicationUser>(userId);
 
             if (user == null)
                 return NotFound("UserNotFound");
@@ -251,33 +244,41 @@ namespace Samrt_Vehical_Hold.Controllers
                 user.IsActive
             });
         }
+        //Done
         [Authorize]
         [HttpPost("UpdateProfile")]
         public async Task <IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
         {
-            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
+            var userId = GetUserId();
             if (userId == null)
                 return Unauthorized();
 
-            var user = await _dataService.GetByIdAsync<ApplicationUser>(Guid.Parse(userId));
+            var user = await _dataService.GetByIdAsync<ApplicationUser>(userId);
 
             if (user == null)
                 return NotFound("UserNotFound");
 
             // Check if email is already used by another user
-            var isEmailTaken = _context.Users.Any(u => u.EmailAddress == request.EmailAddress && u.Id.ToString() != userId);
+            var isEmailTaken = await _dataService.GetQuery<ApplicationUser>()
+                .AnyAsync(u => u.EmailAddress == request.EmailAddress && u.Id != user.Id);
             if (isEmailTaken)
                 return BadRequest("EmailAlreadyInUse");
 
+            // Check if number is already used by another user
+            var isNumberTaken = await _dataService.GetQuery<ApplicationUser>()
+                .AnyAsync(u => u.MobileNumber == request.MobileNumber && u.Id != user.Id);
+            if (isNumberTaken)
+                return BadRequest("NumberAlreadyInUse");
             // Update data
             user.EmailAddress = request.EmailAddress;
             user.MobileNumber = request.MobileNumber;
 
-            _dataService.SaveAsync();
+            await _dataService.UpdateAsync(user);
+            await _dataService.SaveAsync();
 
             return Ok("ProfileUpdatedSuccessfully");
         }
+        //Done
         [Authorize]
         [HttpPost("Logout")]
         public IActionResult Logout()
