@@ -79,10 +79,6 @@ builder.Services.AddAuthorization();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddScoped<IPasswordHasher<ApplicationUser>, PasswordHasher<ApplicationUser>>();
-builder.Services.AddScoped<JwtHelper>();
-
-builder.Services.AddScoped<IDataService, DataService>();
 
 
 
