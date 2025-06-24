@@ -9,8 +9,21 @@ using System.Text;
 using Samrt_Vehical_Hold.Helpers.Service;
 using Samrt_Vehical_Hold.Repo.Impement;
 using Samrt_Vehical_Hold.Repo.Interface;
+using Samrt_Vehical_Hold.Infastructure;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowLocalNetwork", policy =>
+    {
+        policy.WithOrigins("http://192.168.1.115:5300") 
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+
+
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -79,16 +92,34 @@ builder.Services.AddAuthorization();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddBusinessServiceModule();
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.ListenAnyIP(5500);
+});
+
 
 
 
 var app = builder.Build();
+app.UseCors("AllowLocalNetwork");
+app.Use(async (context, next) =>
+{
+    Console.WriteLine($"Request from {context.Connection.RemoteIpAddress} to {context.Request.Path}");
+    await next();
+});
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage();
+
 }
+
+
+
 
 app.UseHttpsRedirection();
 

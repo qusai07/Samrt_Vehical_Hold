@@ -44,12 +44,14 @@ namespace Samrt_Vehical_Hold.Controllers
             if (_dataService.GetQuery<ApplicationUser>().Any(x => x.EmailAddress == signupParameters.EmailAddress))
                 errors.Add("EmailAddressUsed");
             if (_dataService.GetQuery<ApplicationUser>().Any(x => x.NationalNumber == signupParameters.NationalNumber))
-                errors.Add("NationalNumberUsed");
-        
-
+                errors.Add("NationalNumberUsed");   
+            
             if (errors.Any())
                 return BadRequest(errors);
-            var user = new ApplicationUser
+            try
+            {
+        
+                var user = new ApplicationUser
             {
                 FullName = signupParameters.FullName,
                 UserName = signupParameters.UserName,
@@ -66,6 +68,13 @@ namespace Samrt_Vehical_Hold.Controllers
             await _dataService.SaveAsync();
             Console.WriteLine($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
             return Ok(new { user.Id });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+
+
         }
         //Done
         [HttpPost("SignupResendOtp")]
