@@ -14,6 +14,8 @@ namespace Samrt_Vehical_Hold.Data
         public DbSet<ApplicationUser> Users { get; set; }
         public DbSet<PasswordResetRequest> PasswordResetRequests { get; set; }
         public DbSet<Vehicle> vehicles { get; set; }
+        public DbSet<HoldRequest> holdRequests { get; set; }
+
 
     }
 }

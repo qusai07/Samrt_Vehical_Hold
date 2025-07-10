@@ -30,66 +30,149 @@ namespace Samrt_Vehical_Hold.Controllers
 
         [Authorize]
         [HttpPost("GetVehiclesByNationalNumber")]
+        [HttpPost]
         public async Task<IActionResult> GetVehiclesByNationalNumber([FromBody] VehicleRequestDto request)
         {
             var userId = GetUserId();
             if (userId == null)
                 return Unauthorized();
 
-            List<Vehicle> matchedVehicles = new();
+            var filePath = Path.Combine(_env.WebRootPath, "vehicles.json");
+            var vehicleFileService = new VehicleFileService();
+            var vehiclesFromFile = vehicleFileService.ReadVehiclesFromFile(filePath);
+
+            var vehiclesForUser = vehiclesFromFile
+                .Where(v => v.OwnerNationalNumber == request.NationalNumber)
+                .ToList();
 
             if (request.IsInfo)
             {
-                // من الملف
-                var filePath = Path.Combine(_env.WebRootPath, "vehicles.json");
-                var vehicleFileService = new VehicleFileService();
-                var vehiclesFromFile = vehicleFileService.ReadVehiclesFromFile(filePath);
+                // مرحلة الاستعلام فقط
+                if (!vehiclesForUser.Any())
+                {
+                    return NotFound("YouDoNotOwnRegisteredCars");
+                }
 
-                matchedVehicles = vehiclesFromFile
-                    .Where(v => v.OwnerNationalNumber == request.NationalNumber)
-                    .ToList();
-
-                if (!matchedVehicles.Any())
-                    return NotFound("لا تملك سيارات مسجلة");
-
-                return Ok(matchedVehicles);
-            }
-            else
-            {
-                matchedVehicles = await _dataService.GetQuery<Vehicle>()
+                // شيك إذا مسجلها بالداتا بيز
+                var existingVehiclesInDb = await _dataService.GetQuery<Vehicle>()
                     .Where(v => v.OwnerNationalNumber == request.NationalNumber)
                     .ToListAsync();
 
-                if (matchedVehicles.Any())
+                if (existingVehiclesInDb.Any())
                 {
-                    return Ok(matchedVehicles);
-                }
-                else
-                {
-                    var filePath = Path.Combine(_env.WebRootPath, "vehicles.json");
-                    var vehicleFileService = new VehicleFileService();
-                    var vehiclesFromFile = vehicleFileService.ReadVehiclesFromFile(filePath);
-
-                    var vehiclesToAdd = vehiclesFromFile
-                        .Where(v => v.OwnerNationalNumber == request.NationalNumber)
-                        .ToList();
-
-                    if (!vehiclesToAdd.Any())
-                        return NotFound("لا تملك سيارات مسجلة");
-
-                    foreach (var vehicle in vehiclesToAdd)
+                    return Ok(new
                     {
-                        vehicle.Id = Guid.NewGuid();
-                        vehicle.OwnerUserId = userId.Value;
-                        vehicle.RegistrationDate = DateTime.UtcNow;
-
-                        await _dataService.AddAsync(vehicle);
-                    }
-
-                    return Ok(vehiclesToAdd);
+                        Message = "YouAlreadyRegisterYourCar",
+                        Data = existingVehiclesInDb
+                    });
                 }
+
+                // رجع سيارات الملف (لأنه عنده سيارات لكن مش مسجلة بعد)
+                return Ok(new
+                {
+                    Message = "VehiclesFoundInFile",
+                    Data = vehiclesForUser
+                });
+            }
+            else
+            {
+                // مرحلة التسجيل
+
+                if (!vehiclesForUser.Any())
+                    return NotFound("YouDoNotOwnRegisteredCars");
+
+                var existingVehiclesInDb = await _dataService.GetQuery<Vehicle>()
+                    .Where(v => v.OwnerNationalNumber == request.NationalNumber)
+                    .ToListAsync();
+
+                if (existingVehiclesInDb.Any())
+                {
+                    return Ok(new
+                    {
+                        Message = "YouAlreadyRegisterYourCar",
+                        Data = existingVehiclesInDb
+                    });
+                }
+
+\                foreach (var vehicle in vehiclesForUser)
+                {
+                    vehicle.Id = Guid.NewGuid();
+                    vehicle.OwnerUserId = userId.Value;
+                    vehicle.RegistrationDate = DateTime.UtcNow;
+
+                    await _dataService.AddAsync(vehicle);
+                    await _dataService.SaveAsync();
+
+                }
+
+                return Ok(new
+                {
+                    Message = "VehiclesRegisteredSuccessfully",
+                    Data = vehiclesForUser
+                });
             }
         }
+
+        [HttpPost]
+        [Route("api/checkVehicleHold")]
+        public IActionResult CheckVehicleHold([FromBody] VehicleHoldRequestDto request)
+        {
+            var filePath = Path.Combine(_env.WebRootPath, "VehicalHold.json");
+            var holdFileService = new VehicleHoldFileService();
+            var holds = holdFileService.ReadVehicleHoldsFromFile(filePath);
+
+            var vehicleHold = holds.FirstOrDefault(h => h.PlateNumber.Equals(request.PlateNumber, StringComparison.OrdinalIgnoreCase));
+
+            if (vehicleHold == null)
+            {
+                return Ok(new
+                {
+                    Message = "NoHoldOnVehicle",
+                    Data = (object)null
+                });
+            }
+
+            return Ok(new
+            {
+                Message = "VehicleHoldFound",
+                Data = vehicleHold
+            });
+        }
+
+        [HttpPost]
+        [Route("api/submitHoldRequest")]
+        public async Task<IActionResult> SubmitHoldRequest([FromBody] HoldRequestDto request)
+        {
+            var filePath = Path.Combine(_env.WebRootPath, "VehicalHold.json");
+            var holdFileService = new VehicleHoldFileService();
+            var holds = holdFileService.ReadVehicleHoldsFromFile(filePath);
+
+            var vehicleHold = holds.FirstOrDefault(h => h.PlateNumber.Equals(request.PlateNumber, StringComparison.OrdinalIgnoreCase));
+            if (vehicleHold == null)
+                return BadRequest("NoHoldOnVehicle");
+
+            var endDate = request.StartDate.AddDays(vehicleHold.HoldDurationDays);
+
+            var holdApplication = new HoldRequest
+            {
+                Id = Guid.NewGuid(),
+                PlateNumber = request.PlateNumber,
+                StartDate = request.StartDate,
+                EndDate = endDate,
+                Location = request.Location,
+                RequestDate = DateTime.UtcNow
+            };
+
+            await _dataService.AddAsync(holdApplication);
+            await _dataService.SaveAsync();
+
+            return Ok(new
+            {
+                Message = "HoldRequestSubmitted",
+                Data = holdApplication
+            });
+        }
+
 
         public class VehicleFileService
         {
@@ -102,5 +185,14 @@ namespace Samrt_Vehical_Hold.Controllers
 
 
         }
+        public class VehicleHoldFileService
+        {
+            public List<VehicleHold> ReadVehicleHoldsFromFile(string filePath)
+            {
+                var json = System.IO.File.ReadAllText(filePath);
+                return JsonConvert.DeserializeObject<List<VehicleHold>>(json);
+            }
+        }
+
     }
 }

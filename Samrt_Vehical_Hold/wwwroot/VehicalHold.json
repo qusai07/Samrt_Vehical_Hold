@@ -1,0 +1,10 @@
+[
+  {
+    "PlateNumber": "XYZ789",
+    "HoldDurationDays": 3
+  },
+  {
+    "PlateNumber": "ABC123",
+    "HoldDurationDays": 5
+  }
+]
