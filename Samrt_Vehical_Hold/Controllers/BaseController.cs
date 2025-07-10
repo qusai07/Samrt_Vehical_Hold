@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Samrt_Vehical_Hold.Models;
 using Samrt_Vehical_Hold.Repo.Interface;
 using System.Security.Claims;

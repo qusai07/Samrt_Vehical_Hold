@@ -8,36 +8,6 @@ namespace Samrt_Vehical_Hold.Controllers
     [ApiController]
     public class ImpoundRequestsController : ControllerBase
     {
-        // GET: api/<ImpoundRequestsController>
-        [HttpGet]
-        public IEnumerable<string> Get()
-        {
-            return new string[] { "value1", "value2" };
-        }
-
-        // GET api/<ImpoundRequestsController>/5
-        [HttpGet("{id}")]
-        public string Get(int id)
-        {
-            return "value";
-        }
-
-        // POST api/<ImpoundRequestsController>
-        [HttpPost]
-        public void Post([FromBody] string value)
-        {
-        }
-
-        // PUT api/<ImpoundRequestsController>/5
-        [HttpPut("{id}")]
-        public void Put(int id, [FromBody] string value)
-        {
-        }
-
-        // DELETE api/<ImpoundRequestsController>/5
-        [HttpDelete("{id}")]
-        public void Delete(int id)
-        {
-        }
+     
     }
 }

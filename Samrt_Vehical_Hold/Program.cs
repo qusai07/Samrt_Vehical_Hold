@@ -4,11 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Samrt_Vehical_Hold.Data;
 using Samrt_Vehical_Hold.Helpers.Model;
-using Samrt_Vehical_Hold.Models;
 using System.Text;
-using Samrt_Vehical_Hold.Helpers.Service;
-using Samrt_Vehical_Hold.Repo.Impement;
-using Samrt_Vehical_Hold.Repo.Interface;
 using Samrt_Vehical_Hold.Infastructure;
 
 var builder = WebApplication.CreateBuilder(args);

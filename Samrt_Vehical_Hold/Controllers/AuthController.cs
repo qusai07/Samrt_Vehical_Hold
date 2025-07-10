@@ -1,9 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Samrt_Vehical_Hold.Data;
 using Samrt_Vehical_Hold.DTO.Login;
 using Samrt_Vehical_Hold.DTO.ResetPassword;
 using Samrt_Vehical_Hold.DTO.SignUp;
@@ -11,8 +9,6 @@ using Samrt_Vehical_Hold.DTO.UserInfo;
 using Samrt_Vehical_Hold.Helpers.Service;
 using Samrt_Vehical_Hold.Models;
 using Samrt_Vehical_Hold.Repo.Interface;
-using System.Net;
-using System.Security.Claims;
 
 
 namespace Samrt_Vehical_Hold.Controllers
@@ -21,7 +17,6 @@ namespace Samrt_Vehical_Hold.Controllers
     [ApiController]
     public class AuthController : BaseController
     {
-        private readonly ApplicationDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly JwtHelper _jwtHelper;
         private readonly IPasswordHasher<ApplicationUser> _passwordHasher;
@@ -32,7 +27,7 @@ namespace Samrt_Vehical_Hold.Controllers
             _passwordHasher = passwordHasher;
             _jwtHelper = jwtHelper;
         }
-        //Done
+        
         [HttpPost("SignUp")]
         public async Task <IActionResult>SignUp([FromBody] SignupParameters signupParameters) 
         {
@@ -76,7 +71,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
 
         }
-        //Done
+        
         [HttpPost("SignupResendOtp")]
         public async Task <IActionResult>SignupResendOtp([FromBody] SignupUserParameters signupUserParameters)
         {
@@ -94,7 +89,7 @@ namespace Samrt_Vehical_Hold.Controllers
             _dataService.SaveAsync();
             return Ok($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
         }
-        //Done
+        
         [HttpPost("SignupVerifyOtp")]
         public async Task <IActionResult> SignupVerifyOtp([FromBody] SignupVerifyOtpParameters signupVerifyOtpParameters)
         {
@@ -113,7 +108,7 @@ namespace Samrt_Vehical_Hold.Controllers
             _dataService.SaveAsync();
             return Ok("AccountVerified");
         }
-        //Done
+        
         [HttpGet("CheckNationalNumber/{userId}")]
         public async Task<IActionResult> CheckNationalNumber(Guid userId)
         {
@@ -137,7 +132,7 @@ namespace Samrt_Vehical_Hold.Controllers
                 EmailAddress = user.EmailAddress
             });
         }
-        //Done
+        
         [HttpPost("Login")]
         public async Task<IActionResult> Login([FromBody] LoginParameters loginParameters)
         {
@@ -181,7 +176,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
             return Ok("Otp Sent");
         }
-        //Done
+        
         [HttpPost("ResetPassword")]
         public async Task<IActionResult> ResetPassword([FromBody] DTO.ResetPassword.ResetPasswordRequest request)
         {
@@ -208,7 +203,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
             return Ok("PasswordResetSuccessful");
         }
-       //Done
+       
         [Authorize]
         [HttpPost("ChangePassword")]
         public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
@@ -230,7 +225,7 @@ namespace Samrt_Vehical_Hold.Controllers
             await _dataService.SaveAsync();
             return Ok("PasswordChangedSuccessfully");
         }
-        //Done
+        
         [Authorize]
         [HttpGet("GetProfile")]
         public async Task <IActionResult> GetProfile()
@@ -253,7 +248,7 @@ namespace Samrt_Vehical_Hold.Controllers
                 user.IsActive
             });
         }
-        //Done
+        
         [Authorize]
         [HttpPost("UpdateProfile")]
         public async Task <IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
@@ -287,7 +282,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
             return Ok("ProfileUpdatedSuccessfully");
         }
-        //Done
+        
         [Authorize]
         [HttpPost("Logout")]
         public IActionResult Logout()

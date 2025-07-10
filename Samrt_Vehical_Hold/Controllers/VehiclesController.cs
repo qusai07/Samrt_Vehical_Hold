@@ -1,43 +1,106 @@
-﻿using Microsoft.AspNetCore.Mvc;
-
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
+using Samrt_Vehical_Hold.DTO.Vehicle;
+using Samrt_Vehical_Hold.Entities;
+using Samrt_Vehical_Hold.Helpers.Service;
+using Samrt_Vehical_Hold.Repo.Interface;
+using System.Drawing;
 
 namespace Samrt_Vehical_Hold.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class VehiclesController : ControllerBase
+    public class VehiclesController : BaseController
     {
-        // GET: api/<VehiclesController>
-        [HttpGet]
-        public IEnumerable<string> Get()
+        private readonly IConfiguration _configuration;
+        private readonly JwtHelper _jwtHelper;
+
+        private readonly IWebHostEnvironment _env;
+
+        public VehiclesController(IWebHostEnvironment env,IDataService dataService, IConfiguration configuration, JwtHelper jwtHelper)
+            : base(dataService)
         {
-            return new string[] { "value1", "value2" };
+            _configuration = configuration;
+            _jwtHelper = jwtHelper;
+            _env = env;
+
         }
 
-        // GET api/<VehiclesController>/5
-        [HttpGet("{id}")]
-        public string Get(int id)
+        [Authorize]
+        [HttpPost("GetVehiclesByNationalNumber")]
+        public async Task<IActionResult> GetVehiclesByNationalNumber([FromBody] VehicleRequestDto request)
         {
-            return "value";
+            var userId = GetUserId();
+            if (userId == null)
+                return Unauthorized();
+
+            List<Vehicle> matchedVehicles = new();
+
+            if (request.IsInfo)
+            {
+                // من الملف
+                var filePath = Path.Combine(_env.WebRootPath, "vehicles.json");
+                var vehicleFileService = new VehicleFileService();
+                var vehiclesFromFile = vehicleFileService.ReadVehiclesFromFile(filePath);
+
+                matchedVehicles = vehiclesFromFile
+                    .Where(v => v.OwnerNationalNumber == request.NationalNumber)
+                    .ToList();
+
+                if (!matchedVehicles.Any())
+                    return NotFound("لا تملك سيارات مسجلة");
+
+                return Ok(matchedVehicles);
+            }
+            else
+            {
+                matchedVehicles = await _dataService.GetQuery<Vehicle>()
+                    .Where(v => v.OwnerNationalNumber == request.NationalNumber)
+                    .ToListAsync();
+
+                if (matchedVehicles.Any())
+                {
+                    return Ok(matchedVehicles);
+                }
+                else
+                {
+                    var filePath = Path.Combine(_env.WebRootPath, "vehicles.json");
+                    var vehicleFileService = new VehicleFileService();
+                    var vehiclesFromFile = vehicleFileService.ReadVehiclesFromFile(filePath);
+
+                    var vehiclesToAdd = vehiclesFromFile
+                        .Where(v => v.OwnerNationalNumber == request.NationalNumber)
+                        .ToList();
+
+                    if (!vehiclesToAdd.Any())
+                        return NotFound("لا تملك سيارات مسجلة");
+
+                    foreach (var vehicle in vehiclesToAdd)
+                    {
+                        vehicle.Id = Guid.NewGuid();
+                        vehicle.OwnerUserId = userId.Value;
+                        vehicle.RegistrationDate = DateTime.UtcNow;
+
+                        await _dataService.AddAsync(vehicle);
+                    }
+
+                    return Ok(vehiclesToAdd);
+                }
+            }
         }
 
-        // POST api/<VehiclesController>
-        [HttpPost]
-        public void Post([FromBody] string value)
+        public class VehicleFileService
         {
-        }
+            public List<Vehicle> ReadVehiclesFromFile(string filePath)
+            {
+                var json = System.IO.File.ReadAllText(filePath);
 
-        // PUT api/<VehiclesController>/5
-        [HttpPut("{id}")]
-        public void Put(int id, [FromBody] string value)
-        {
-        }
+                return JsonConvert.DeserializeObject<List<Vehicle>>(json);
+            }
 
-        // DELETE api/<VehiclesController>/5
-        [HttpDelete("{id}")]
-        public void Delete(int id)
-        {
+
         }
     }
 }
