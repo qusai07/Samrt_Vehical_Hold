@@ -15,7 +15,7 @@ namespace Samrt_Vehical_Hold.Mapper
             //     .ForMember(dest => dest.SubAcademicLevelsId, opt => opt.MapFrom(src => src.SubLevelId))
             //     .ForMember(dest => dest.SubAcademicLevelsId, opt => opt.MapFrom(src => src.SubLevelId))
             //     .ReverseMap()
-              //  ;
+            //  ;
        
         }
     }

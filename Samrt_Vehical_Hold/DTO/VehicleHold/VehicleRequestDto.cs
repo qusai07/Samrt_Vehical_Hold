@@ -1,4 +1,4 @@
-﻿namespace Samrt_Vehical_Hold.DTO.Vehicle
+﻿namespace Samrt_Vehical_Hold.DTO.VehicleHold
 {
     public class VehicleRequestDto
     {

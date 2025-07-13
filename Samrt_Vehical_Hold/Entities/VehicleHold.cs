@@ -4,5 +4,7 @@
     {
         public string PlateNumber { get; set; }
         public int HoldDurationDays { get; set; }
+        public DateTime RequestDate { get; set; }
+
     }
 }

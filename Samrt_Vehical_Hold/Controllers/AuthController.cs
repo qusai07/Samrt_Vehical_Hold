@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Samrt_Vehical_Hold.Data;
 using Samrt_Vehical_Hold.DTO.Login;
 using Samrt_Vehical_Hold.DTO.ResetPassword;
 using Samrt_Vehical_Hold.DTO.SignUp;
@@ -56,13 +57,14 @@ namespace Samrt_Vehical_Hold.Controllers
                 IsActive = false,
                 OtpCode = OtpHelper.GenerateOtp(6),
                 OtpDate = DateTime.UtcNow,
-            };
+                    Role = signupParameters.UserRole
+                };
 
             user.PasswordHash = _passwordHasher.HashPassword(user, signupParameters.Password);
             await _dataService.AddAsync(user);
             await _dataService.SaveAsync();
             Console.WriteLine($"[OTP] Sent to {user.MobileNumber}: {user.OtpCode}");
-            return Ok(new { user.Id });
+            return Ok(new { user.ID });
             }
             catch (Exception ex)
             {
@@ -168,7 +170,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
             var resetRequest = new PasswordResetRequest
             {
-                UserId = user.Id,
+                UserId = user.ID,
                 ResetCode = resetCode,
                 ExpiryDate = DateTime.UtcNow.AddMinutes(15)
             };
@@ -187,7 +189,7 @@ namespace Samrt_Vehical_Hold.Controllers
                 return BadRequest("UserNotFound");
 
             var resetRequest = await _dataService.GetQuery<PasswordResetRequest>()
-        .FirstOrDefaultAsync(r => r.UserId == user.Id && r.ResetCode == request.ResetCode && !r.IsUsed);
+        .FirstOrDefaultAsync(r => r.UserId == user.ID && r.ResetCode == request.ResetCode && !r.IsUsed);
 
             if (resetRequest == null)
                 return BadRequest("InvalidResetCode");
@@ -241,7 +243,7 @@ namespace Samrt_Vehical_Hold.Controllers
 
             return Ok(new
             {
-                user.Id,
+                user.ID,
                 user.FullName,
                 user.UserName,
                 user.EmailAddress,
@@ -264,13 +266,13 @@ namespace Samrt_Vehical_Hold.Controllers
 
             // Check if email is already used by another user
             var isEmailTaken = await _dataService.GetQuery<ApplicationUser>()
-                .AnyAsync(u => u.EmailAddress == request.EmailAddress && u.Id != user.Id);
+                .AnyAsync(u => u.EmailAddress == request.EmailAddress && u.ID != user.ID);
             if (isEmailTaken)
                 return BadRequest("EmailAlreadyInUse");
 
             // Check if number is already used by another user
             var isNumberTaken = await _dataService.GetQuery<ApplicationUser>()
-                .AnyAsync(u => u.MobileNumber == request.MobileNumber && u.Id != user.Id);
+                .AnyAsync(u => u.MobileNumber == request.MobileNumber && u.ID != user.ID);
             if (isNumberTaken)
                 return BadRequest("NumberAlreadyInUse");
             // Update data

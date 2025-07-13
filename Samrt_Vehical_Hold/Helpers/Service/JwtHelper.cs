@@ -26,10 +26,9 @@ namespace Samrt_Vehical_Hold.Helpers.Service
 
             var claims = new[]
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, user.ID.ToString()),
                 new Claim(ClaimTypes.Name, user.UserName),
-                new Claim("FullName", user.FullName)
-            };
+                new Claim(ClaimTypes.Role, user.Role.ToString())            };
 
             var token = new JwtSecurityToken(
                 issuer: _jwtSettings.Issuer,

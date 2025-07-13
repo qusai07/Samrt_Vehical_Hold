@@ -1,4 +1,6 @@
-﻿namespace Samrt_Vehical_Hold.Entities
+﻿using Samrt_Vehical_Hold.Models;
+
+namespace Samrt_Vehical_Hold.Entities
 {
     public class Vehicle
     {
@@ -10,5 +12,7 @@
         public string OwnerNationalNumber { get; set; } = null!;
         public Guid OwnerUserId { get; set; }
         public DateTime RegistrationDate { get; set; }
+        public ApplicationUser OwnerUser { get; set; }
+
     }
 }

@@ -8,6 +8,10 @@
         public DateTime EndDate { get; set; }
         public string Location { get; set; }
         public DateTime RequestDate { get; set; }
+        public bool IsStart { get; set; }
+        public Guid VehicleId { get; set; }
+        public Vehicle Vehicle { get; set; }
+
     }
 
 }

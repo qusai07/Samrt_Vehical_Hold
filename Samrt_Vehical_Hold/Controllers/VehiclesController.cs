@@ -2,33 +2,27 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
-using Samrt_Vehical_Hold.DTO.Vehicle;
+using Samrt_Vehical_Hold.DTO.VehicleHold;
 using Samrt_Vehical_Hold.Entities;
 using Samrt_Vehical_Hold.Helpers.Service;
 using Samrt_Vehical_Hold.Repo.Interface;
 using System.Drawing;
+using static Samrt_Vehical_Hold.Extensions.FileExtensions;
 
 namespace Samrt_Vehical_Hold.Controllers
 {
+    [Authorize(Roles = "User")]
     [Route("api/[controller]")]
     [ApiController]
     public class VehiclesController : BaseController
     {
-        private readonly IConfiguration _configuration;
-        private readonly JwtHelper _jwtHelper;
-
         private readonly IWebHostEnvironment _env;
-
-        public VehiclesController(IWebHostEnvironment env,IDataService dataService, IConfiguration configuration, JwtHelper jwtHelper)
+        public VehiclesController(IWebHostEnvironment env,IDataService dataService)
             : base(dataService)
         {
-            _configuration = configuration;
-            _jwtHelper = jwtHelper;
             _env = env;
-
         }
 
-        [Authorize]
         [HttpPost("GetVehiclesByNationalNumber")]
         [HttpPost]
         public async Task<IActionResult> GetVehiclesByNationalNumber([FromBody] VehicleRequestDto request)
@@ -47,13 +41,11 @@ namespace Samrt_Vehical_Hold.Controllers
 
             if (request.IsInfo)
             {
-                // مرحلة الاستعلام فقط
                 if (!vehiclesForUser.Any())
                 {
                     return NotFound("YouDoNotOwnRegisteredCars");
                 }
 
-                // شيك إذا مسجلها بالداتا بيز
                 var existingVehiclesInDb = await _dataService.GetQuery<Vehicle>()
                     .Where(v => v.OwnerNationalNumber == request.NationalNumber)
                     .ToListAsync();
@@ -67,7 +59,6 @@ namespace Samrt_Vehical_Hold.Controllers
                     });
                 }
 
-                // رجع سيارات الملف (لأنه عنده سيارات لكن مش مسجلة بعد)
                 return Ok(new
                 {
                     Message = "VehiclesFoundInFile",
@@ -76,7 +67,6 @@ namespace Samrt_Vehical_Hold.Controllers
             }
             else
             {
-                // مرحلة التسجيل
 
                 if (!vehiclesForUser.Any())
                     return NotFound("YouDoNotOwnRegisteredCars");
@@ -94,7 +84,7 @@ namespace Samrt_Vehical_Hold.Controllers
                     });
                 }
 
-\                foreach (var vehicle in vehiclesForUser)
+                foreach (var vehicle in vehiclesForUser)
                 {
                     vehicle.Id = Guid.NewGuid();
                     vehicle.OwnerUserId = userId.Value;
@@ -112,7 +102,6 @@ namespace Samrt_Vehical_Hold.Controllers
                 });
             }
         }
-
         [HttpPost]
         [Route("api/checkVehicleHold")]
         public IActionResult CheckVehicleHold([FromBody] VehicleHoldRequestDto request)
@@ -127,17 +116,21 @@ namespace Samrt_Vehical_Hold.Controllers
             {
                 return Ok(new
                 {
-                    Message = "NoHoldOnVehicle",
-                    Data = (object)null
+                    Message = "NoHoldOnVehicle"
                 });
             }
+
+            var holdEndDate = vehicleHold.RequestDate.AddDays(vehicleHold.HoldDurationDays);
+            var timeRemaining = holdEndDate - DateTime.UtcNow;
 
             return Ok(new
             {
                 Message = "VehicleHoldFound",
-                Data = vehicleHold
+                Data = vehicleHold,
+                TimeRemaining = timeRemaining.TotalHours > 0 ? timeRemaining.ToString(@"dd\.hh\:mm\:ss") : "Expired"
             });
         }
+
 
         [HttpPost]
         [Route("api/submitHoldRequest")]
@@ -150,7 +143,10 @@ namespace Samrt_Vehical_Hold.Controllers
             var vehicleHold = holds.FirstOrDefault(h => h.PlateNumber.Equals(request.PlateNumber, StringComparison.OrdinalIgnoreCase));
             if (vehicleHold == null)
                 return BadRequest("NoHoldOnVehicle");
-
+            var userId = GetUserId();
+            var vehicle = _dataService.GetQuery<Vehicle>().FirstOrDefault(v => v.Id == request.VehicleId && v.OwnerUserId == userId);
+            if (vehicle == null)
+                return BadRequest("VehicleNotBelongToUser");
             var endDate = request.StartDate.AddDays(vehicleHold.HoldDurationDays);
 
             var holdApplication = new HoldRequest
@@ -160,7 +156,9 @@ namespace Samrt_Vehical_Hold.Controllers
                 StartDate = request.StartDate,
                 EndDate = endDate,
                 Location = request.Location,
-                RequestDate = DateTime.UtcNow
+                RequestDate = DateTime.UtcNow,
+                VehicleId = request.VehicleId,
+                IsStart = false
             };
 
             await _dataService.AddAsync(holdApplication);
@@ -173,26 +171,7 @@ namespace Samrt_Vehical_Hold.Controllers
             });
         }
 
-
-        public class VehicleFileService
-        {
-            public List<Vehicle> ReadVehiclesFromFile(string filePath)
-            {
-                var json = System.IO.File.ReadAllText(filePath);
-
-                return JsonConvert.DeserializeObject<List<Vehicle>>(json);
-            }
-
-
-        }
-        public class VehicleHoldFileService
-        {
-            public List<VehicleHold> ReadVehicleHoldsFromFile(string filePath)
-            {
-                var json = System.IO.File.ReadAllText(filePath);
-                return JsonConvert.DeserializeObject<List<VehicleHold>>(json);
-            }
-        }
+      
 
     }
 }
