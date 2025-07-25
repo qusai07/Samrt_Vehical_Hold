@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Azure.Core;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
@@ -23,8 +24,32 @@ namespace Samrt_Vehical_Hold.Controllers
             _env = env;
         }
 
-        [HttpPost("GetVehiclesByNationalNumber")]
+        [HttpPost("GetMyVehical")]
+        public async Task<IActionResult> GetMyVehical([FromBody]VehicleRequestDto request)
+        {
+            var userId = GetUserId();
+            if (userId == null)
+                return Unauthorized();
+
+            var existingVehiclesInDb = await _dataService.GetQuery<Vehicle>()
+                .Where(v => v.OwnerNationalNumber == request.NationalNumber )
+                    .ToListAsync();
+
+            if (existingVehiclesInDb != null && request.IsInfo)
+            {
+                return Ok(new
+                {
+                    Message = "Success",
+                    Data = existingVehiclesInDb
+                });
+            }
+            else
+            {
+                return BadRequest("YouDosentHaveAnyCar");
+            }
+        }
         [HttpPost]
+        [HttpPost("GetVehiclesByNationalNumber")]
         public async Task<IActionResult> GetVehiclesByNationalNumber([FromBody] VehicleRequestDto request)
         {
             var userId = GetUserId();
@@ -54,7 +79,6 @@ namespace Samrt_Vehical_Hold.Controllers
                 {
                     return Ok(new
                     {
-                        Message = "YouAlreadyRegisterYourCar",
                         Data = existingVehiclesInDb
                     });
                 }

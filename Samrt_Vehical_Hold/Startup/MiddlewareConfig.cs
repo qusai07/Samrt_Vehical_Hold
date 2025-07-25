@@ -14,7 +14,7 @@ namespace Samrt_Vehical_Hold.Startup
                 await next();
             });
 
-            if (app.Environment.IsDevelopment())
+            if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
